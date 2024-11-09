@@ -21,16 +21,16 @@ class NetworkHandler(ss.StreamRequestHandler):
             json_data = json.loads(str(data))
 
             # uncomment the following line to see pretty-printed data
-            print(json.dumps(json_data, indent=4, sort_keys=True))
+            # print(json.dumps(json_data, indent=4, sort_keys=True))
 
             time = json_data['time']
             turn = json_data['turn'] # get the current turn
             tile_updates = json_data['tile_updates']
             unit_updates = json_data['unit_updates']
             if turn == 0:
-                player_id = json_data['player_id']
                 game_info = json_data['game_info'] # get the game settings, only sent on turn 0
-                
+
+                # player_id = json_data['player_id']
                 map_width = game_info['map_width']
                 map_height = game_info['map_height']
                 game_duration = game_info['game_duration']
@@ -38,12 +38,14 @@ class NetworkHandler(ss.StreamRequestHandler):
                 unit_info = game_info['unit_info']
 
                 memory_map = [[[] for _ in range(map_height * 2 + 1)] for _ in range(map_width * 2 + 1)]
+                my_units = unit_updates
 
                 print('received width: ', map_width)
                 print('received height: ', map_height)
 
-                for row in memory_map:
-                    print(" ".join(map(str, row)))
+                # for row in memory_map:
+                #     print(" ".join(map(str, row)))
+
             if time == 0:
                 results = json_data['results']
                 
@@ -70,9 +72,18 @@ class NetworkHandler(ss.StreamRequestHandler):
                 Invalid Commands: {invalid_commands}
                 Exploration Percentage: {exploration_pct}%
                 """)
-                
                 return
             
+            # update the tiles
+            for tile in tile_updates:
+                memory_map_x = tile['x'] * 2 + 1
+                memory_map_y = tile['y'] * 2 + 1
+
+                memory_map[memory_map_x][memory_map_y] = tile
+            
+            for unit in unit_updates:
+                if unit['status'] == 'dead':
+                    my_units.remove(unit)
 
             response = game.get_random_move(json_data).encode()
             self.wfile.write(response)
@@ -94,14 +105,8 @@ class Game:
         response = json.dumps(command, separators=(',',':')) + '\n'
         return response
 
-    # def get_farming_move(self, json_data):
-    #     units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] == 'worker'])
-    #     self.units |= units # add any additional ids we encounter
-
-    #     for unit in json_data:
-    #         if unit['type'] == 'worker' and 
-    #     unit = random.choice(tuple(self.units))
-    #     move = 'GATHER'
+    def get_goated_move(self, json_data):
+        pass
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if (len(sys.argv) > 1 and sys.argv[1]) else 9090
