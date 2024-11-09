@@ -95,8 +95,6 @@ class NetworkHandler(ss.StreamRequestHandler):
                 if unit['status'] == 'dead':
                     my_units.remove(unit)
             
-            # for row in memory_map:
-            #     print(" ".join(map(str, row)))
 
             # response = game.get_random_move(json_data).encode()
             response = game.get_resource(json_data, memory_map, base_location).encode()
@@ -123,44 +121,30 @@ class Game:
         units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] != 'base'])
         self.units |= units # add any additional ids we encounter
 
-        unit = random.choice(tuple(self.units))
-        direction = random.choice(self.directions)
-        move = 'MOVE'
-
-        resource = self.find_closest_unit_to_resource(json_data, memory_map)
-
-        if resource[0]:
-            unit = resource[0]
-            closest_resource = resource[1]
-
-            direction = self.get_move_direction(unit['x'], unit['y'], closest_resource[0], closest_resource[1])
-            move = 'MOVE'
-
-        for unit in json_data['unit_updates']:
-            found_resouce = False
-
-            if unit['type'] == 'base':
-                continue
-            unit_x = unit['x']
-            unit_y = unit['y']
-
+        closest_resource = self.find_closest_resource(memory_map)
+        if closest_resource:
+            unit = self.find_closest_unit(json_data, closest_resource[0], closest_resource[1])
+            print(unit)
+    
             if unit['resource'] == 10:
                 move = 'MOVE'
                 direction = direction = self.get_move_direction(unit['x'], unit['y'], base_location[0], base_location[1])
                 command = {"commands": [{"command": move, "unit": unit["id"], "dir": direction}]}
                 response = json.dumps(command, separators=(',',':')) + '\n'
                 return response
+            
+            found_resouce = False
 
-            if memory_map[unit_x - 1][unit_y] == '[R]':
+            if memory_map[unit['x'] - 1][unit['y']] == '[R]':
                 found_resouce = True
                 direction = 'W'
-            elif memory_map[unit_x + 1][unit_y] == '[R]':
+            elif memory_map[unit['x'] + 1][unit['y']] == '[R]':
                 found_resouce = True
                 direction = 'E'
-            elif memory_map[unit_x][unit_y + 1] == '[R]':
+            elif memory_map[unit['x']][unit['y'] + 1] == '[R]':
                 found_resouce = True
                 direction = 'S'
-            elif memory_map[unit_x][unit_y - 1] == '[R]':
+            elif memory_map[unit['x']][unit['y'] - 1] == '[R]':
                 found_resouce = True
                 direction = 'N'
     
@@ -170,29 +154,47 @@ class Game:
                 response = json.dumps(command, separators=(',',':')) + '\n'
                 return response
 
+            direction = self.get_move_direction(unit['x'], unit['y'], closest_resource[0], closest_resource[1])
+            move = 'MOVE'
+            command = {"commands": [{"command": move, "unit": unit["id"], "dir": direction}]}
+            response = json.dumps(command, separators=(',',':')) + '\n'
+            return response
+
+        unit = random.choice(tuple(self.units))
+        direction = random.choice(self.directions)
+        move = 'MOVE'
+
         command = {"commands": [{"command": move, "unit": unit, "dir": direction}]}
         response = json.dumps(command, separators=(',',':')) + '\n'
 
         return response
     
-    def find_closest_unit_to_resource(self, json_data, memory_map):
+    def find_closest_unit(self, json_data, target_x, target_y):
         closest_unit = None
+        min_distance = float('inf')
+
+        for unit in json_data['unit_updates']:
+            unit_x, unit_y = unit['x'], unit['y']
+            distance = abs(unit_x - target_x) + abs(unit_y - target_y)
+
+            if distance < min_distance:
+                min_distance = distance
+                closest_unit = unit
+        return closest_unit
+    
+    def find_closest_resource(self, memory_map):
         closest_resource = None
         min_distance = float('inf')
+        base_x, base_y = 0, 0 
 
         for x in range(len(memory_map)):
             for y in range(len(memory_map[0])):
                 if memory_map[x][y] == '[R]':
-                    for unit in json_data['unit_updates']:
-                        print(unit)
-                        unit_x, unit_y = unit['x'], unit['y']
-                        distance = abs(unit_x - x) + abs(unit_y - y)
-
-                        if distance < min_distance:
-                            min_distance = distance
-                            closest_unit = unit
-                            closest_resource = (x, y)
-        return closest_unit, closest_resource
+                    distance = abs(base_x - x) + abs(base_y - y)  # Example base distance calculation
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_resource = (x, y)
+        return closest_resource
     
     def get_move_direction(self, current_x, current_y, target_x, target_y):
         if current_x < target_x:
