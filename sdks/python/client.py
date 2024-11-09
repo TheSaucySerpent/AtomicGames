@@ -37,14 +37,12 @@ class NetworkHandler(ss.StreamRequestHandler):
                 turn_duration = game_info['turn_duration']
                 unit_info = game_info['unit_info']
 
-                memory_map = [[[] for _ in range(map_height * 2 + 1)] for _ in range(map_width * 2 + 1)]
+                memory_map = [[[ ] for _ in range(map_height)] for _ in range(map_width)]
                 my_units = unit_updates
+                
+                memory_map[my_units[0]['x']][my_units[0]['y']] = '[B]'
+                base_location = (my_units[0]['x'], my_units[0]['y'])
 
-                print('received width: ', map_width)
-                print('received height: ', map_height)
-
-                # for row in memory_map:
-                #     print(" ".join(map(str, row)))
 
             if time == 0:
                 results = json_data['results']
@@ -73,19 +71,31 @@ class NetworkHandler(ss.StreamRequestHandler):
                 Exploration Percentage: {exploration_pct}%
                 """)
                 return
-            
+
             # update the tiles
             for tile in tile_updates:
-                memory_map_x = tile['x'] * 2 + 1
-                memory_map_y = tile['y'] * 2 + 1
+                print(tile)
+                memory_map_x = tile['x']
+                memory_map_y = tile['y']
 
-                memory_map[memory_map_x][memory_map_y] = tile
-            
+                if tile['resources'] and tile['units']:
+                    memory_map[memory_map_x][memory_map_y] = "[O]"
+                elif tile['resources']:
+                    memory_map[memory_map_x][memory_map_y] = "[R]"
+                elif tile['units']:
+                    memory_map[memory_map_x][memory_map_y] = "[E]"
+                elif tile['blocked']:
+                    memory_map[memory_map_x][memory_map_y] = "[X]"
+
             for unit in unit_updates:
                 if unit['status'] == 'dead':
                     my_units.remove(unit)
+            
+            # for row in memory_map:
+            #     print(" ".join(map(str, row)))
 
-            response = game.get_random_move(json_data).encode()
+            # response = game.get_random_move(json_data).encode()
+            response = game.get_goated_move(json_data, memory_map).encode()
             self.wfile.write(response)
 
 
@@ -105,8 +115,51 @@ class Game:
         response = json.dumps(command, separators=(',',':')) + '\n'
         return response
 
-    def get_goated_move(self, json_data):
-        pass
+    def get_goated_move(self, json_data, memory_map):
+        units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] != 'base'])
+        self.units |= units # add any additional ids we encounter
+
+        unit = random.choice(tuple(self.units))
+        direction = 'N'
+        move = 'MOVE'
+
+        for unit in json_data['unit_updates']:
+            found_resouce = False
+
+            if unit['type'] == 'base':
+                continue
+            unit_x = unit['x']
+            unit_y = unit['y']
+
+            
+            print(memory_map[unit_x][unit_y - 1])
+
+            if memory_map[unit_x - 1][unit_y] == '[R]':
+                found_resouce = True
+                direction = 'W'
+            elif memory_map[unit_x + 1][unit_y] == '[R]':
+                found_resouce = True
+                direction = 'E'
+            elif memory_map[unit_x][unit_y + 1] == '[R]':
+                found_resouce = True
+                direction = 'S'
+            elif memory_map[unit_x][unit_y - 1] == '[R]':
+                found_resouce = True
+                direction = 'N'
+        
+            if found_resouce:
+                print('found a resourse')
+                move = 'GATHER'
+                command = {"commands": [{"command": move, "unit": unit['id'], "dir": direction}]}
+                response = json.dumps(command, separators=(',',':')) + '\n'
+                return response
+
+        
+        command = {"commands": [{"command": move, "unit": unit, "dir": direction}]}
+        response = json.dumps(command, separators=(',',':')) + '\n'
+
+        return response
+        
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if (len(sys.argv) > 1 and sys.argv[1]) else 9090
