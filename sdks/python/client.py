@@ -3,6 +3,7 @@
 import sys
 import json
 import random
+import heapq
 
 if (sys.version_info > (3, 0)):
     print("Python 3.X detected")
@@ -98,7 +99,7 @@ class NetworkHandler(ss.StreamRequestHandler):
             #     print(" ".join(map(str, row)))
 
             # response = game.get_random_move(json_data).encode()
-            response = game.get_resource(json_data, memory_map).encode()
+            response = game.get_resource(json_data, memory_map, base_location).encode()
             self.wfile.write(response)
 
 
@@ -118,13 +119,22 @@ class Game:
         response = json.dumps(command, separators=(',',':')) + '\n'
         return response
 
-    def get_resource(self, json_data, memory_map):
+    def get_resource(self, json_data, memory_map, base_location):
         units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] != 'base'])
         self.units |= units # add any additional ids we encounter
 
         unit = random.choice(tuple(self.units))
-        direction = 'N'
+        direction = random.choice(self.directions)
         move = 'MOVE'
+
+        resource = self.find_closest_unit_to_resource(json_data, memory_map)
+
+        if resource[0]:
+            unit = resource[0]
+            closest_resource = resource[1]
+
+            direction = self.get_move_direction(unit['x'], unit['y'], closest_resource[0], closest_resource[1])
+            move = 'MOVE'
 
         for unit in json_data['unit_updates']:
             found_resouce = False
@@ -136,7 +146,7 @@ class Game:
 
             if unit['resource'] == 10:
                 move = 'MOVE'
-                direction = 'S'
+                direction = direction = self.get_move_direction(unit['x'], unit['y'], base_location[0], base_location[1])
                 command = {"commands": [{"command": move, "unit": unit["id"], "dir": direction}]}
                 response = json.dumps(command, separators=(',',':')) + '\n'
                 return response
@@ -164,7 +174,36 @@ class Game:
         response = json.dumps(command, separators=(',',':')) + '\n'
 
         return response
-        
+    
+    def find_closest_unit_to_resource(self, json_data, memory_map):
+        closest_unit = None
+        closest_resource = None
+        min_distance = float('inf')
+
+        for x in range(len(memory_map)):
+            for y in range(len(memory_map[0])):
+                if memory_map[x][y] == '[R]':
+                    for unit in json_data['unit_updates']:
+                        print(unit)
+                        unit_x, unit_y = unit['x'], unit['y']
+                        distance = abs(unit_x - x) + abs(unit_y - y)
+
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_unit = unit
+                            closest_resource = (x, y)
+        return closest_unit, closest_resource
+    
+    def get_move_direction(self, current_x, current_y, target_x, target_y):
+        if current_x < target_x:
+            return 'E'  # Move East (right)
+        elif current_x > target_x:
+            return 'W'  # Move West (left)
+        elif current_y < target_y:
+            return 'S'  # Move South (down)
+        elif current_y > target_y:
+            return 'N'  # Move North (up)
+
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if (len(sys.argv) > 1 and sys.argv[1]) else 9090
