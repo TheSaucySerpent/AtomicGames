@@ -74,11 +74,12 @@ class NetworkHandler(ss.StreamRequestHandler):
 
             # update the tiles
             for tile in tile_updates:
-                print(tile)
                 memory_map_x = tile['x']
                 memory_map_y = tile['y']
 
-                if tile['resources'] and tile['units']:
+                if not tile['visible']:
+                    memory_map[memory_map_x][memory_map_y] = '[?]'
+                elif tile['resources'] and tile['units']:
                     memory_map[memory_map_x][memory_map_y] = "[O]"
                 elif tile['resources']:
                     memory_map[memory_map_x][memory_map_y] = "[R]"
@@ -86,6 +87,8 @@ class NetworkHandler(ss.StreamRequestHandler):
                     memory_map[memory_map_x][memory_map_y] = "[E]"
                 elif tile['blocked']:
                     memory_map[memory_map_x][memory_map_y] = "[X]"
+                else:
+                    memory_map[memory_map_x][memory_map_y] = "[ ]"
 
             for unit in unit_updates:
                 if unit['status'] == 'dead':
@@ -95,7 +98,7 @@ class NetworkHandler(ss.StreamRequestHandler):
             #     print(" ".join(map(str, row)))
 
             # response = game.get_random_move(json_data).encode()
-            response = game.get_goated_move(json_data, memory_map).encode()
+            response = game.get_resource(json_data, memory_map).encode()
             self.wfile.write(response)
 
 
@@ -115,7 +118,7 @@ class Game:
         response = json.dumps(command, separators=(',',':')) + '\n'
         return response
 
-    def get_goated_move(self, json_data, memory_map):
+    def get_resource(self, json_data, memory_map):
         units = set([unit['id'] for unit in json_data['unit_updates'] if unit['type'] != 'base'])
         self.units |= units # add any additional ids we encounter
 
@@ -131,8 +134,12 @@ class Game:
             unit_x = unit['x']
             unit_y = unit['y']
 
-            
-            print(memory_map[unit_x][unit_y - 1])
+            if unit['resource'] == 10:
+                move = 'MOVE'
+                direction = 'S'
+                command = {"commands": [{"command": move, "unit": unit["id"], "dir": direction}]}
+                response = json.dumps(command, separators=(',',':')) + '\n'
+                return response
 
             if memory_map[unit_x - 1][unit_y] == '[R]':
                 found_resouce = True
@@ -146,15 +153,13 @@ class Game:
             elif memory_map[unit_x][unit_y - 1] == '[R]':
                 found_resouce = True
                 direction = 'N'
-        
+    
             if found_resouce:
-                print('found a resourse')
                 move = 'GATHER'
                 command = {"commands": [{"command": move, "unit": unit['id'], "dir": direction}]}
                 response = json.dumps(command, separators=(',',':')) + '\n'
                 return response
 
-        
         command = {"commands": [{"command": move, "unit": unit, "dir": direction}]}
         response = json.dumps(command, separators=(',',':')) + '\n'
 
